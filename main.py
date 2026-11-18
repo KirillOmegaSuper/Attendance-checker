@@ -58,3 +58,37 @@ class AttendanceApp:
                         w.writerow(["Student ID", "Course", "Total Classes", "Attended", "Excused", "Unexcused", "Percentage", "Minimum", "Remaining", "Status", "Date"])
                         w.writerows(rows)
                     messagebox.showinfo("Export", f"Exported {len(rows)} records.")
+
+    def calculate(self):
+        try:
+            course = self.fields["course"].get().strip() or "Not specified"
+            dni = self.fields["dni"].get().strip()
+            total = int(self.fields["total"].get())
+            attended = int(self.fields["attended"].get())
+            excused = int(self.fields["excused"].get() or 0)
+            minimum = float(self.fields["minimum"].get().replace(",", "."))
+            if not dni or len(dni) > 8 or not dni.isdigit():
+                raise ValueError("Enter a valid Student ID (up to 8 digits).")
+            if total <= 0 or not 0 <= minimum <= 100 or min(attended, excused) < 0 or attended + excused > total:
+                raise ValueError("Check the class totals and minimum percentage.")
+        except ValueError as e:
+            messagebox.showerror("Invalid Input", str(e) or "Enter valid numbers in all fields.")
+            return
+
+        percentage = (attended + excused) / total * 100
+        unexcused = total - attended - excused
+        remaining = total - math.ceil(minimum * total / 100) - unexcused
+        passed = percentage >= minimum
+        status = "PASSED" if passed else "FAILED"
+        margin = f"You may miss {remaining} more class(es)." if passed else f"You need {abs(remaining)} more class(es)."
+        self.report = {"DNI": dni, "Course": course, "Total": total, "Attended": attended,
+                       "Excused": excused, "Unexcused": unexcused, "Percentage": round(percentage, 2),
+                       "Minimum": minimum, "Remaining": remaining, "Status": status}
+        self.action("gauge", percentage, "#16A34A" if passed else "#DC2626")
+        self.state.config(text="✓ PASSED" if passed else "✕ FAILED", bg="#0C9B50" if passed else "#C62828", fg="white")
+        self.details.config(text=f"{course}\nAttended: {attended}/{total}\nExcused: {excused}\nUnexcused: {unexcused}\nRequired: {minimum:g}%\n{margin}")
+        try:
+            self.database("save", self.report)
+            messagebox.showinfo("Saved", "Student record saved to the database.")
+        except sqlite3.Error as e:
+            messagebox.showerror("Database Error", str(e))
